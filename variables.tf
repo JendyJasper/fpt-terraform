@@ -11,7 +11,7 @@ variable "name" {
 }
 
 variable "ami" {
-    default = "ami-0fc5d935ebf8bc3bc"
+    default = "ami-052501ccfd3fb7c9f"
 }
 
 variable "instance_type" {
@@ -34,3 +34,14 @@ variable "priv-subnet" {
 variable "pub-subnet" {
     default = ["172.168.48.0/20", "172.168.64.0/20", "172.168.80.0/20"]
 }
+
+# variable "subnets" {
+#     default = {
+#         "priv-subnet-1": {"az": "us-east-1a", "cidr": "172.168.0.0/20"},
+#         "priv-subnet-2": {"az": "us-east-1b", "cidr": "172.168.16.0/20"},
+#         "priv-subnet-3": {"az": "us-east-1c", "cidr": "172.168.32.0/20"},
+#         "pub-subnet-1": {"az": "us-east-1a", "cidr": "172.168.48.0/20"},
+#         "pub-subnet-2": {"az": "us-east-1b", "cidr": "172.168.64.0/20"},
+#         "pub-subnet-3": {"az": "us-east-1c", "cidr": "172.168.80.0/20"}
+#     }
+# }
