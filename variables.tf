@@ -27,12 +27,33 @@ variable "avail-zone" {
     default = ["us-east-1a", "us-east-1b", "us-east-1c"]
 }
 
+variable "updated-avail-zone" {
+    default = {
+        "zone-1": "us-east-1a",
+        "zone-2": "us-east-1b",
+        "zone-3": "us-east-1c"
+    }
+}
+
 variable "priv-subnet" {
     default = ["172.168.0.0/20", "172.168.16.0/20", "172.168.32.0/20"]
 }
 
+
 variable "pub-subnet" {
     default = ["172.168.48.0/20", "172.168.64.0/20", "172.168.80.0/20"]
+}
+
+variable "performance_mode" {
+    default = "maxIO"
+}
+
+variable "throughput_mode" {
+    default = "provisioned"
+}
+
+variable "provisioned_throughput_in_mibps" {
+    default = 256
 }
 
 # variable "subnets" {

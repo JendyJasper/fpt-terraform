@@ -30,6 +30,14 @@ module "vpc" {
     single_nat_gateway = true
     enable_nat_gateway = true
     one_nat_gateway_per_az = false
+    public_subnet_tags = {
+      "kubernetes.io/cluster/fpt-cluster" = "shared"
+      "kubernetes.io/role/elb" = "1"
+    }
+    private_subnet_tags = {
+      "kubernetes.io/cluster/fpt-cluster" = "shared"
+      "kubernetes.io/role/internal-elb" = "1"
+    }
     nat_eip_tags = {
         Name = format("%s-eip", var.name)
     }
@@ -49,22 +57,22 @@ module "vpc" {
 
 
 #Bastion Security group
-module "bastion-security-group" {
-  source  = "terraform-aws-modules/security-group/aws"
-  version = "5.1.0"
+# module "bastion-security-group" {
+#   source  = "terraform-aws-modules/security-group/aws"
+#   version = "5.1.0"
 
-  name = "bastion-security-group"
-  description = "The security group which enables ssh access to the bastion server from the workstation IP address"
-  vpc_id = module.vpc.vpc_id
-  ingress_cidr_blocks = ["125.235.133.125/32"]
-  ingress_rules = ["ssh-tcp"]
-  tags = {
-    Name = format("%s-bastion-sg", var.name)
-  }
-  egress_cidr_blocks = [ "0.0.0.0/0" ]
-  egress_rules = [ "all-all" ]
+#   name = "bastion-security-group"
+#   description = "The security group which enables ssh access to the bastion server from the workstation IP address"
+#   vpc_id = module.vpc.vpc_id
+#   ingress_cidr_blocks = ["125.235.133.125/32"]
+#   ingress_rules = ["ssh-tcp"]
+#   tags = {
+#     Name = format("%s-bastion-sg", var.name)
+#   }
+#   egress_cidr_blocks = [ "0.0.0.0/0" ]
+#   egress_rules = [ "all-all" ]
   
-}
+# }
 
 
 #App security group
@@ -305,6 +313,38 @@ module "bastion-security-group" {
 #   deletion_protection = false
 # }
 
+#IAM EFS CSI Driver Role
+# module "iam_efs_csi_role_eks" {
+#   source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
+#   version = "5.33.1"
+
+#   role_name = "AmazonEKS_EFS_CSI_DriverRole"
+#   attach_efs_csi_policy = true
+
+#   oidc_providers = {
+#     main = {
+#       provider_arn               = module.eks.oidc_provider_arn
+#       namespace_service_accounts = ["kube-system:efs-csi-controller-sa", "default:efs-csi-controller-sa", "default:prometheus-stack-grafana" ]
+#     }
+#   }
+
+# }
+
+module "iam_ebs_csi_role_eks" {
+  source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
+  version = "5.33.1"
+
+  role_name = "AmazonEKS_EBS_CSI_DriverRole"
+  attach_ebs_csi_policy  = true
+
+  oidc_providers = {
+    main = {
+      provider_arn               = module.eks.oidc_provider_arn
+      namespace_service_accounts = ["kube-system:ebs-csi-controller-sa", "default:ebs-csi-controller-sa", "monitoring:ebs-csi-controller-sa", "monitoring:prometheus-stack-grafana" ]
+    }
+  }
+
+}
 
 #eks private cluster
 module "eks" {
@@ -326,6 +366,7 @@ module "eks" {
       configuration_values = jsonencode({
         computeType = "Fargate"
       })  #this resolves coredns degraded error
+      most_recent = true
     }
     kube-proxy = {
       most_recent = true
@@ -333,17 +374,58 @@ module "eks" {
     vpc-cni = {
       most_recent = true
     }
-    
+    aws-efs-csi-driver = {
+      most_recent = true
+    }
+    aws-ebs-csi-driver = {
+      most_recent = true
+    }
   }
 
   vpc_id = module.vpc.vpc_id
   subnet_ids = [module.vpc.private_subnets[0], module.vpc.private_subnets[1], module.vpc.private_subnets[2]]
   control_plane_subnet_ids = [module.vpc.private_subnets[0], module.vpc.private_subnets[1], module.vpc.private_subnets[2]]
 
+
+  # EKS Managed Node Group(s)
+  eks_managed_node_group_defaults = {
+    ami_type       = "AL2_x86_64"
+    instance_types = ["t3.small", "t3.medium"]
+
+    attach_cluster_primary_security_group = true
+   
+  }
+
+  eks_managed_node_groups = {
+    blue = {
+      iam_role_additional_policies = {
+        AmazonEBSCSIDriverPolicy = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
+      }
+    }
+    green = {
+      min_size     = 1
+      max_size     = 2
+      desired_size = 1
+
+      instance_types = ["t3.small"]
+      capacity_type  = "SPOT"
+
+      # create_iam_role  = false
+      # iam_role_arn = module.iam_ebs_csi_role_eks.iam_role_arn
+      iam_role_additional_policies = {
+        AmazonEBSCSIDriverPolicy = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
+      }
+    }
+    }
+
+
   # Fargate Profile(s)
   fargate_profiles = {
-    default = {
+    fpt-profile = {
       name = "default"
+      iam_role_additional_policies = {
+        AmazonEFSCSIDriverPolicy = "arn:aws:iam::aws:policy/service-role/AmazonEFSCSIDriverPolicy"
+      }
       selectors = [
         {
           namespace = "kube-system"
@@ -353,6 +435,15 @@ module "eks" {
         },
         {
           namespace = "default"
+        },
+        {
+          namespace = "main-fpt"
+        },
+        {
+          namespace = "ingress-controller"
+        },
+        {
+          namespace = "cert-manager"
         }
       ]
 
@@ -366,9 +457,9 @@ module "eks" {
       }
     }
   }
-
+  
   # aws-auth configmap
-  # create_aws_auth_configmap = true
+  create_aws_auth_configmap = false
   manage_aws_auth_configmap = true
 
   aws_auth_roles = [
@@ -385,6 +476,11 @@ module "eks" {
       username = "fpt_eks_user"
       groups   = ["system:masters"]
     },
+    {
+      userarn  = "arn:aws:iam::571207880192:user/terraform"
+      username = "terraform"
+      groups   = ["system:masters"]
+    },
   ]
 
   aws_auth_accounts = [
@@ -397,3 +493,175 @@ module "eks" {
   }
 
 }
+
+
+#EFS Module
+# module "efs" {
+#   source  = "terraform-aws-modules/efs/aws"
+#   version = "1.4.0"
+
+#   # File system
+#   name = format("%s-efs", var.name)
+#   creation_token = format("%s-token", var.name)
+#   encrypted = true
+#   kms_key_arn = module.kms.key_arn
+
+#   performance_mode                = var.performance_mode 
+#   throughput_mode                 = var.throughput_mode
+#   provisioned_throughput_in_mibps = var.provisioned_throughput_in_mibps
+#   lifecycle_policy = {
+#     transition_to_ia                    = "AFTER_30_DAYS"
+#     transition_to_primary_storage_class = "AFTER_1_ACCESS"
+#   }
+
+#    # File system policy
+#   attach_policy = false
+
+#     # Mount targets / security group
+#   mount_targets = {
+#     for k, v in zipmap(var.avail-zone, module.vpc.private_subnets) : k => {
+#     subnet_id = v
+#   }
+#   }
+
+#   security_group_description = format("%s-EFS security group", var.name)
+#   security_group_vpc_id      = module.vpc.vpc_id
+#   security_group_rules = {
+#     vpc = {
+#       # relying on the defaults provdied for EFS/NFS (2049/TCP + ingress)
+#       description = "NFS ingress from VPC private"
+#       cidr_blocks = module.vpc.private_subnets_cidr_blocks
+#     }
+#     cluster_primary_security_group_id = {
+#       # relying on the defaults provdied for EFS/NFS (2049/TCP + ingress)
+#       description = "NFS ingress from cluster_primary_security_group_id"
+#       source_security_group_id = module.eks.cluster_primary_security_group_id
+#     }
+#     cluster_security_group_id = {
+#       # relying on the defaults provdied for EFS/NFS (2049/TCP + ingress)
+#       description = "NFS ingress from cluster_security_group_id"
+#       source_security_group_id = module.eks.cluster_security_group_id
+#     }
+#     node_security_group_id = {
+#       # relying on the defaults provdied for EFS/NFS (2049/TCP + ingress)
+#       description = "NFS ingress from node_security_group_id"
+#       source_security_group_id = module.eks.node_security_group_id
+#     }
+#   }
+
+#   # Access point(s)
+#   access_points = {
+#     prometheus = {
+#       name = "prometheus"
+#       posix_user = {
+#         gid            = 1006
+#         uid            = 1006
+#         secondary_gids = [1002]
+#       }
+#       root_directory = {
+#         path = "/var/lib/kubelet/pods"
+#         creation_info = {
+#           owner_gid   = 1006
+#           owner_uid   = 1006
+#           permissions = "777"
+#         }
+#       }
+
+#       tags = {
+#         Additionl = "yes"
+#       }
+#     }
+#     grafana = {
+#       name = "grafana"
+#       posix_user = {
+#         gid            = 1002
+#         uid            = 1002
+#         secondary_gids = [1003]
+#       }
+#       root_directory = {
+#         path = "/var/lib/kubelet/pods"
+#         creation_info = {
+#           owner_gid   = 1002
+#           owner_uid   = 1002
+#           permissions = "777"
+#         }
+#       }
+
+#       tags = {
+#         Additionl = "yes"
+#       }
+#     }
+#     thanosruler = {
+#       name = "thanosruler"
+#       posix_user = {
+#         gid            = 1003
+#         uid            = 1003
+#         secondary_gids = [1004]
+#       }
+#       root_directory = {
+#         path = "/var/lib/kubelet/pods"
+#         creation_info = {
+#           owner_gid   = 1003
+#           owner_uid   = 1003
+#           permissions = "777"
+#         }
+#       }
+
+#       tags = {
+#         Additionl = "yes"
+#       }
+#     }
+#     alertmanager = {
+#       name = "alertmanager"
+#       posix_user = {
+#         gid            = 1004
+#         uid            = 1004
+#         secondary_gids = [1005]
+#       }
+#       root_directory = {
+#         path = "/var/lib/kubelet/pods"
+#         creation_info = {
+#           owner_gid   = 1004
+#           owner_uid   = 1004
+#           permissions = "777"
+#         }
+#       }
+
+#       tags = {
+#         Additionl = "yes"
+#       }
+#     }
+#     root = {
+#       root_directory = {
+#         path = "/"
+#         creation_info = {
+#           owner_gid   = 1001
+#           owner_uid   = 1001
+#           permissions = "777"
+#         }
+#       }
+#     }
+#   }
+
+#    # Backup policy
+#   enable_backup_policy = true
+
+#   # Replication configuration
+#   create_replication_configuration = true
+#   replication_configuration_destination = {
+#     region = "eu-west-2"
+#   }
+
+#   tags = {
+#     Name = format("%s-efs", var.name)
+# }
+# }
+
+module "kms" {
+  source  = "terraform-aws-modules/kms/aws"
+  version = "2.1.0"
+
+  description = "EFS key usage"
+  key_usage   = "ENCRYPT_DECRYPT"
+}
+
