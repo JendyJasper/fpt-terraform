@@ -20,12 +20,13 @@ provider "kubernetes" {
 #VPC Creation
 module "vpc" {
     source = "terraform-aws-modules/vpc/aws"
+    version = "5.5.2"
 
-    name = format("%s-VPC", var.name)
-    azs = var.avail-zone
-    cidr = var.vpc-cidr
-    public_subnets = var.pub-subnet
-    private_subnets = var.priv-subnet
+    name = format("%s_VPC", var.name)
+    azs = var.avail_zone
+    cidr = var.vpc_cidr
+    public_subnets = var.pub_subnet
+    private_subnets = var.priv_subnet
     create_igw = true
     single_nat_gateway = true
     enable_nat_gateway = true
@@ -39,19 +40,19 @@ module "vpc" {
       "kubernetes.io/role/internal-elb" = "1"
     }
     nat_eip_tags = {
-        Name = format("%s-eip", var.name)
+        Name = format("%s_eip", var.name)
     }
     private_route_table_tags = {
-        Name = format("%s-private-rtb", var.name)
+        Name = format("%s_private_rtb", var.name)
         }
     public_route_table_tags = {
-        Name = format("%s-public-rtb", var.name)
+        Name = format("%s_public_rtb", var.name)
         }
     igw_tags = {
-        Name = format("%s-igw", var.name)
+        Name = format("%s_igw", var.name)
         }
     nat_gateway_tags = {
-        Name = format("%s-nat_gateway", var.name)
+        Name = format("%s_nat_gateway", var.name)
     }
 }
 
@@ -193,24 +194,24 @@ module "vpc" {
 
 
 #Create private key to enable ssh access to the servers
-# module "key-pair" {
+# module "key_pair" {
 #   source  = "terraform-aws-modules/key-pair/aws"
 #   version = "2.0.2"
 
-#   key_name           = "FPT-Private-Key"
+#   key_name           = "FPT_Private_Key"
 #   create_private_key = true
 # }
 
 
 #create bastion ec2-instance 
-# module "bastion-ec2-instance" {
+# module "bastion_ec2_instance" {
 #   source  = "terraform-aws-modules/ec2-instance/aws"
 #   version = "5.5.0"
 
 #   name = "bastion-ec2-instance"
 
 #   instance_type          = var.instance_type
-#   key_name               = module.key-pair.key_pair_name
+#   key_name               = module.key_pair.key_pair_name
 #   monitoring             = true
 #   vpc_security_group_ids = [module.bastion-security-group.security_group_id]
 #   subnet_id              = module.vpc.public_subnets[0]
@@ -488,7 +489,7 @@ module "eks" {
   ]
 
   tags = {
-    Name = format("%s-eks", var.name)
+    Name = format("%s_eks", var.name)
     Terraform = "true"
   }
 

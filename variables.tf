@@ -2,7 +2,7 @@ variable "region" {
     default = "us-east-1"
 }
 
-variable "vpc-cidr" {
+variable "vpc_cidr" {
     default = "172.168.0.0/16"
 }
 
@@ -18,29 +18,29 @@ variable "instance_type" {
     default = "t2.micro"
 }
 
-variable "rds-username" {
+variable "rds_username" {
     default = "fptdb"
     sensitive = true
 }
 
-variable "avail-zone" {
+variable "avail_zone" {
     default = ["us-east-1a", "us-east-1b", "us-east-1c"]
 }
 
-variable "updated-avail-zone" {
+variable "updated_avail_zone" {
     default = {
-        "zone-1": "us-east-1a",
-        "zone-2": "us-east-1b",
-        "zone-3": "us-east-1c"
+        "zone_1": "us-east-1a",
+        "zone_2": "us-east-1b",
+        "zone_3": "us-east-1c"
     }
 }
 
-variable "priv-subnet" {
+variable "priv_subnet" {
     default = ["172.168.0.0/20", "172.168.16.0/20", "172.168.32.0/20"]
 }
 
 
-variable "pub-subnet" {
+variable "pub_subnet" {
     default = ["172.168.48.0/20", "172.168.64.0/20", "172.168.80.0/20"]
 }
 
@@ -55,14 +55,3 @@ variable "throughput_mode" {
 variable "provisioned_throughput_in_mibps" {
     default = 256
 }
-
-# variable "subnets" {
-#     default = {
-#         "priv-subnet-1": {"az": "us-east-1a", "cidr": "172.168.0.0/20"},
-#         "priv-subnet-2": {"az": "us-east-1b", "cidr": "172.168.16.0/20"},
-#         "priv-subnet-3": {"az": "us-east-1c", "cidr": "172.168.32.0/20"},
-#         "pub-subnet-1": {"az": "us-east-1a", "cidr": "172.168.48.0/20"},
-#         "pub-subnet-2": {"az": "us-east-1b", "cidr": "172.168.64.0/20"},
-#         "pub-subnet-3": {"az": "us-east-1c", "cidr": "172.168.80.0/20"}
-#     }
-# }
