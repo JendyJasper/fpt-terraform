@@ -6,6 +6,14 @@ variable "vpc_cidr" {
     default = "172.168.0.0/16"
 }
 
+variable "private_key_path" {
+    type = string
+}
+
+variable "public_key_path" {
+    type = string
+}
+
 variable "name" {
     default = "FPT"
 }

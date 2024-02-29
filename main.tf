@@ -194,13 +194,25 @@ module "vpc" {
 
 
 #Create private key to enable ssh access to the servers
-# module "key_pair" {
-#   source  = "terraform-aws-modules/key-pair/aws"
-#   version = "2.0.2"
+module "key_pair" {
+  source  = "terraform-aws-modules/key-pair/aws"
+  version = "2.0.2"
 
-#   key_name           = "FPT_Private_Key"
-#   create_private_key = true
-# }
+  key_name           = "FPT_Private_Key"
+  create_private_key = true
+}
+
+#save private key to a file
+resource "local_file" "private_key_file" {
+  filename = var.private_key_path
+  content  = module.key_pair.private_key_pem
+}
+
+#save public key to a file
+resource "local_file" "public_key_file" {
+  filename = var.public_key_path
+  content  = module.key_pair.public_key_openssh
+}
 
 
 #create bastion ec2-instance 
@@ -391,7 +403,7 @@ module "eks" {
   # EKS Managed Node Group(s)
   eks_managed_node_group_defaults = {
     ami_type       = "AL2_x86_64"
-    instance_types = ["t3.small", "t3.medium"]
+    instance_types = ["t3.small"]
 
     attach_cluster_primary_security_group = true
    
@@ -439,12 +451,6 @@ module "eks" {
         },
         {
           namespace = "main-fpt"
-        },
-        {
-          namespace = "ingress-controller"
-        },
-        {
-          namespace = "cert-manager"
         }
       ]
 
