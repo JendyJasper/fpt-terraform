@@ -2,6 +2,15 @@ provider "aws" {
     region = var.region
 }
 
+# Configure S3 backend
+terraform {
+  backend "s3" {
+    bucket         = "fpt-state-bucket"
+    key            = "fpt/terraform.tfstate"
+    region         = "us-east-1"
+    dynamodb_table = "fpt_state_lock_table"
+  }
+}
 
 provider "kubernetes" {
   host                   = module.eks.cluster_endpoint
@@ -15,7 +24,38 @@ provider "kubernetes" {
   }
 }
 
+# Create S3 bucket for state file
+resource "aws_s3_bucket" "terraform_state_bucket" {
+  bucket = "fpt-state-bucket"
 
+  # Prevent accidental deletion of the S3 bucket
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "aws_s3_bucket_versioning" "fpt_bucket_versioning" {
+  bucket = aws_s3_bucket.terraform_state_bucket.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+# Create DynamoDB table for state locking
+resource "aws_dynamodb_table" "terraform_state_lock_table" {
+  name           = "fpt_state_lock_table"
+  billing_mode   = "PAY_PER_REQUEST"
+  hash_key       = "LockID"
+  attribute {
+    name = "LockID"
+    type = "S"
+  }
+
+  # Prevent accidental deletion of the DynamoDB table
+  lifecycle {
+    prevent_destroy = true
+  }
+}
 
 #VPC Creation
 module "vpc" {
@@ -194,7 +234,7 @@ module "vpc" {
 
 
 #Create private key to enable ssh access to the servers
-module "key_pair" {
+module "fpt_key_pair" {
   source  = "terraform-aws-modules/key-pair/aws"
   version = "2.0.2"
 
@@ -203,17 +243,30 @@ module "key_pair" {
 }
 
 #save private key to a file
-resource "local_file" "private_key_file" {
-  filename = var.private_key_path
-  content  = module.key_pair.private_key_pem
-}
+# resource "local_file" "private_key_file" {
+#   filename = var.private_key_path
+#   content  = module.key_pair.private_key_pem
+# }
 
 #save public key to a file
-resource "local_file" "public_key_file" {
-  filename = var.public_key_path
-  content  = module.key_pair.public_key_openssh
+# resource "local_file" "public_key_file" {
+#   filename = var.public_key_path
+#   content  = module.key_pair.public_key_openssh
+# }
+
+#create secret key to store the private and public keys
+resource "aws_secretsmanager_secret" "fpt_key_pair_secret" {
+  name = "fpt/key_pair"
 }
 
+#create the public and private key values\
+resource "aws_secretsmanager_secret_version" "fpt_key_pair_secret_version" {
+  secret_id     = aws_secretsmanager_secret.fpt_key_pair_secret.id
+  secret_string = jsonencode({
+    private_key = module.fpt_key_pair.private_key_pem,
+    public_key  = module.fpt_key_pair.public_key_openssh
+  })
+}
 
 #create bastion ec2-instance 
 # module "bastion_ec2_instance" {
