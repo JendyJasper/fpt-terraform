@@ -34,6 +34,23 @@ resource "aws_s3_bucket" "terraform_state_bucket" {
   }
 }
 
+# Create S3 bucket for velero backup
+resource "aws_s3_bucket" "fpt_velero_bucket" {
+  bucket = "fpt-velero-bucket"
+
+  # Prevent accidental deletion of the S3 bucket
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "aws_s3_bucket_versioning" "fpt_velero_bucket_versioning" {
+  bucket = aws_s3_bucket.fpt_velero_bucket.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
 resource "aws_s3_bucket_versioning" "fpt_bucket_versioning" {
   bucket = aws_s3_bucket.terraform_state_bucket.id
   versioning_configuration {
@@ -725,3 +742,54 @@ module "kms" {
   key_usage   = "ENCRYPT_DECRYPT"
 }
 
+resource "aws_iam_user_policy" "fpt_velero" {
+  name = "fpt_velero"
+  user = aws_iam_user.fpt_velero.name
+
+  # Terraform's "jsonencode" function converts a
+  # Terraform expression result to valid JSON syntax.
+  policy = jsonencode({
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "ec2:DescribeVolumes",
+                "ec2:DescribeSnapshots",
+                "ec2:CreateTags",
+                "ec2:CreateVolume",
+                "ec2:CreateSnapshot",
+                "ec2:DeleteSnapshot"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "s3:GetObject",
+                "s3:DeleteObject",
+                "s3:PutObject",
+                "s3:AbortMultipartUpload",
+                "s3:ListMultipartUploadParts"
+            ],
+            "Resource": [
+                "arn:aws:s3:::fpt-velero-bucket/*"
+            ]
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "s3:ListBucket"
+            ],
+            "Resource": [
+                "arn:aws:s3:::fpt-velero-bucket"
+            ]
+        }
+    ]
+
+  })
+}
+
+resource "aws_iam_user" "fpt_velero" {
+  name = "fpt_velero"
+}
